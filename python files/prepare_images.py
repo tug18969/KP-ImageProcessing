@@ -16,22 +16,22 @@ import mergevec
 def main():
     link = "http://image-net.org/api/text/imagenet.synset.geturls?wnid=n07739125"
     direc = "apple"
-    numNeg = 2549
-    #store_raw_images(link,direc)
-#    create_pos_n_neg()
-    #found = find_uglies(direc,"ugly.jpg")
-    #print "Ugly images removed:",found
-    #create_bg('neg')
+    numNeg = 900
+    store_raw_images(link,direc)
+    found = find_uglies(direc,"ugly.jpg")
+    print "Ugly images removed:",found
+    create_bg('neg')
     info = "info"
     bg = "bg.txt"
-    num_samples = 50
+    num_samples = 2000
     print "Creating Vector File..."
     vecpath = create_positives_new(direc,info, bg, num_samples)
     print "Vector File Created."
-    
+    vecpath = "info/positives.vec"
     print "Training..."
-    train( vecpath, bg, num_samples, numNeg, 10,"data")
+    train( vecpath, bg, num_samples*.8, numNeg, 10,"data")
     print "Training Complete."
+    
     
 def store_raw_images(images_link, store_path, pic_num=1, img_dim=(100,100), quiet=False):
     #Retrieves all images from the provided link, storing them as a jpg with an
