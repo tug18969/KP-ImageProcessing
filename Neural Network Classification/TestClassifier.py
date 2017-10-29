@@ -15,7 +15,11 @@ import numpy as np
 import os
 
 class FoodClassifier:
-    
+#Class Attributes:
+#model - the underlying keras model
+#labels - the labels to be associated with the activation of each output neuron. 
+#Labels must be the same size as the output layer of the neural network.    
+
     def __init__(self, modelpath, labels):
         self.model = load_model(modelpath)
         self.labels = labels
@@ -40,7 +44,7 @@ class FoodClassifier:
         #print(prediction.shape)
         #print(prediction)
         
-        #get max of predictions and return labels
+        #get max of predictions and return label(s)
         predIdx = np.argmax(prediction[0,:])
         return self.labels[predIdx]
         
