@@ -11,6 +11,7 @@ import os
 import subprocess
 import math
 import mergevec
+import socket
 
 
 def main():
@@ -44,8 +45,12 @@ def store_raw_images(images_link, store_path, pic_num=1, img_dim=None, quiet=Fal
         #quiet: whether or not to hide output.
     #Returns: returns the counter for pictures
     
+    #set default timeout to 30 seconds
+    socket.setdefaulttimeout(30)
+    
+    
     #open the web page
-    neg_image_urls = urllib.urlopen(images_link).read().decode()
+    neg_image_urls = urllib.urlopen(images_link).read().decode('utf-8')
     
 	 #create the directory if it doesnt exist
     if not os.path.exists(store_path):
@@ -105,6 +110,7 @@ def find_uglies(folder, ugly):
     try:
         ug = cv2.imread(ugly)
         ug = cv2.resize(ug,(128,128))
+        #cv2.imshow(ug)
     except Exception as e:
         print(str(e))
         return -1
@@ -113,13 +119,21 @@ def find_uglies(folder, ugly):
     num_uglies = 0
     for img in os.listdir(folder):
         try:
+            
             #load image into memory
             current_img_path = str(folder) + '/' + str(img)
             question = cv2.imread(current_img_path)
+            
+            #if image does not exist, remove it
+            if(question==None):
+                if(os.path.isfile(current_img_path)):
+                    os.remove(current_img_path)
+                continue
+                    
             question = cv2.resize(question,(128,128))
             
             #if match
-            if ug.shape == question.shape and not(np.bitwise_xor(ug,question).any()):
+            if not(np.bitwise_xor(ug,question).any()):
                 num_uglies +=1
                 os.remove(current_img_path)
         except Exception as e:
