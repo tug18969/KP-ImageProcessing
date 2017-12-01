@@ -4,28 +4,43 @@ Spyder Editor
 
 This is a temporary script file.
 """
-import tensorflow as tf
-import cv2
-import keras
-from keras.models import load_model
-from keras.preprocessing.image import img_to_array, load_img
-import matplotlib.pyplot as plt
-from PIL import Image
-import numpy as np    
-import os
+
 
 class FoodClassifier:
-#Class Attributes:
-#model - the underlying keras model
-#labels - the labels to be associated with the activation of each output neuron. 
-#Labels must be the same size as the output layer of the neural network.    
-
-    def __init__(self, modelpath, labels):
-        self.model = load_model(modelpath)
-        self.labels = labels
+    #Class Attributes:
+    #model - the underlying keras model
+    #labels - the labels to be associated with the activation of each output neuron. 
+    #Labels must be the same size as the output layer of the neural network.    
+    
+    
+    def __init__(self, modelpath, labels, min_confidence = 0.6):
+        from keras.models import load_model
+        from keras.applications.resnet50 import ResNet50
+        self.resnet = ResNet50(include_top=False,weights='imagenet',pooling='max',input_shape=(224,224,3))
+        self.extModel = load_model(modelpath)
+        
+        if(isinstance(labels,str)):
+            #its a file path
+            from os.path import exists
+            if(exists(labels)):
+                f = open(labels,'r')
+                x = f.readlines()
+                y = []
+                for i in x:
+                    y.append(i.split('\n')[0])
+                self.labels = y
+        else:
+            self.labels = labels
+        
+        self.num_classes = len(labels)
+        self.min_confidence=min_confidence
+    
     
     def predict(self,img):
-        
+        import os
+        from PIL import Image
+        from keras.preprocessing.image import img_to_array
+        import numpy as np 
         #check if image is a filepath
         if(isinstance(img,str)):
             if(not os.path.exists(img)):
@@ -37,21 +52,45 @@ class FoodClassifier:
         
         #resize image
         #shape from model input
-        shape = self.model.input_shape
+        shape = self.resnet.input_shape
         imgr = img.resize(shape[1:3])
         
         x = img_to_array(imgr).reshape((1,shape[1],shape[2],shape[3]))
         
+        
         #predict
-        prediction = self.model.predict(x)
-        #print(prediction.shape)
-        #print(prediction)
+        features = self.resnet.predict(x)
+        prediction = self.extModel.predict(features)
         
         #get max of predictions and return label(s)
-        predIdx = np.argmax(prediction[0,:])
-        return self.labels[predIdx]
+        predIdx = np.argmax(prediction)
+        if(prediction[0,predIdx]<self.min_confidence):
+            return ""
+        else:
+            return self.labels[predIdx]
+    
+    
+    
+    def set_extModel(self,model):
+        self.extModel = model
+    
+    def get_extModel(self):
+        return self.extModel
+    
+    
+    def set_labels(self,labels):
+        self.labels = labels
         
-        
+    def get_labels(self):
+        return self.labels
+    
+    
+    def set_min_confidence(self,conf):
+        self.min_confidence=conf
+    
+    def get_min_confidence(self):
+        return self.min_confidence
+    
         
 def generate_features_from_directory(location,target_image_count,model=None):
     #generates feature maps from the convolutional layers of ResNet50 using all
@@ -174,23 +213,25 @@ def create_data_set(data_path,output_folder,save_to_file=True):
         
 
 
-def train_classifier_from_directory(train_dir,train_size,val_dir,val_size,output_dir):
+def train_classifier_from_images(train_dir,train_size,val_dir,val_size,output_dir):
     #INPUTS:
-        #train_dir is the directory containig the training data
-        #test_dir is the directory containing the validation data
+        #train_dir is the directory containig the training images
+        #test_dir is the directory containing the validation images
         #output_dir is the directory to save the trained model
+        #train_size is the number of images to generate for each training class
+        #val_size is the number of images to generate for each validation class
     #OUTPUTS
     #A model that takes as input a 2048-vector of feature maps and outputs
     #a prediction of what an image with those features might be.
     #The labels file is also placed in this directory
     
     #The model created is an SVM with softmax activation.
+    from time import time
     from keras.applications.resnet50 import ResNet50
-    import numpy as np
     from keras.models import Sequential
     from keras.optimizers import SGD
     from keras.regularizers import l2
-    from keras.layers import Dense, InputLayer
+    from keras.layers import Dense
     from sklearn.utils import shuffle
     from keras.callbacks import EarlyStopping, ModelCheckpoint
     
@@ -221,9 +262,12 @@ def train_classifier_from_directory(train_dir,train_size,val_dir,val_size,output
     extModel.compile(loss='hinge',optimizer=SGD(lr=0.01,momentum=0.9),metrics=["accuracy"])
     
     #callbacks
-    checkpoint = ModelCheckpoint("extModel.h5", monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
+    checkpoint = ModelCheckpoint(output_dir + "/extModel"+str(int(time()))+".h5", monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
     early = EarlyStopping(monitor='val_acc', min_delta=0, patience=10, verbose=1, mode='auto')
     
+    
+    with open(output_dir+"/labels.txt","w") as output:
+        output.write("".join([label + '\n' for label in labels]))
     
     #train model
     print("Training...")
@@ -234,54 +278,47 @@ def train_classifier_from_directory(train_dir,train_size,val_dir,val_size,output
                  callbacks = [checkpoint,early])
     
     return extModel
+
+def add_to_train(train_dir,image,label, resnet):
+    #INPUTS
+        #Train_dir - the directory that all npy files are contained
+        #image - the path to the image being added
+        #resnet - the resnet model to be used for feature determination
+        #label - the name of the item
+    #Appends the features of the new item to the training set data for that label
+    from PIL import Image
+    from os.path import exists
+    from keras.preprocessing.image import img_to_array 
     
-
-
-def train_model(train_x_path,train_y_path,val_x_path,val_y_path,output_dir,num_epochs = 50):
-    #function for testing model training
+    if(isinstance(image,str)):
+        if(not exists(image)):
+            print("Error: Invalid File Path")
+            return ""
+        else:
+            #if its a filepath, convert to PIL image
+            img = Image.open(image)
+    
+    shape = resnet.input_shape
+    imgr = img.resize(shape[1:3])
+    
+    x = img_to_array(imgr).reshape((1,shape[1],shape[2],shape[3]))
+    
+    #predict
+    features = resnet.predict(x)
+    
+    
+    
 
     import numpy as np
-    from keras.models import Sequential
-    from keras.optimizers import SGD, Adam
-    from keras.regularizers import l2
-    from keras.layers import Dense
-    from sklearn.utils import shuffle
-    from keras.callbacks import EarlyStopping, ModelCheckpoint
     
-    X_train = np.load(train_x_path)
-    y_train = np.load(train_y_path)
-    X_val = np.load(val_x_path)
-    y_val = np.load(val_y_path)
+    npyname = train_dir+'/'+label+'.npy'
+    if(not exists(npyname)):
+        np.save(npyname,features)    
+    else:
+        fullset = np.load(npyname)
+        newset = np.append(fullset,features,axis=0)
+        np.save(npyname,newset)
     
-    #shuffle the train data
-    X_train,y_train = shuffle(X_train,y_train)
-    
-    num_classes = 3
-    
-    #create the extension model
-    print("Creating extension model...")
-    extModel = Sequential()
-    extModel.add(Dense(2048,input_shape=(2048,),activation='relu'))
-    extModel.add(Dense(2048,activation='relu'))
-    extModel.add(Dense(num_classes, activation='softmax',W_regularizer = l2(0.01)))
-    #extModel.compile(loss='categorical_crossentropy',optimizer=SGD(lr=0.01,momentum=0.9),metrics=["accuracy"])
-    extModel.compile(loss='categorical_crossentropy',optimizer=Adam(lr=0.1),metrics=["accuracy"])
-     
-    #callbacks
-    checkpoint = ModelCheckpoint("extModel.h5", monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
-    early = EarlyStopping(monitor='val_acc', min_delta=0, patience=10, verbose=1, mode='auto')
-    
-    
-    #train model
-    print("Training...")
-    extModel.fit(X_train[:20],y_train[:20],
-                 batch_size=32,
-                 epochs=num_epochs,
-                 validation_data=(X_val,y_val),
-                 callbacks = [checkpoint,early])
-    
-    return extModel
-        
         
         
         
