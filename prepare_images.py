@@ -10,7 +10,7 @@ import numpy as np
 import os
 import subprocess
 import math
-import mergevec
+#import mergevec
 
 
 def main():
@@ -33,7 +33,7 @@ def main():
     print "Training Complete."
     
     
-def store_raw_images(images_link, store_path, pic_num=1, img_dim=(100,100), quiet=False):
+def store_raw_images(images_link, store_path, pic_num=1, img_dim=None, quiet=False):
     #Retrieves all images from the provided link, storing them as a jpg with an
     #incremental number in the specified folder.
     #Arguments: 
@@ -45,7 +45,9 @@ def store_raw_images(images_link, store_path, pic_num=1, img_dim=(100,100), quie
     #Returns: returns the counter for pictures
     
     #open the web page
-    neg_image_urls = urllib.urlopen(images_link).read().decode()
+    import socket
+    socket.setdefaulttimeout(10)
+    neg_image_urls = urllib.urlopen(images_link).read().decode('utf-8')
     
 	 #create the directory if it doesnt exist
     if not os.path.exists(store_path):
@@ -65,13 +67,14 @@ def store_raw_images(images_link, store_path, pic_num=1, img_dim=(100,100), quie
             urllib.urlretrieve(i, img_path)
             
             #read each image in as a greyscale
-            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+            img = cv2.imread(img_path, cv2.IMREAD_COLOR)
             
             #resize the images
-            resized_image = cv2.resize(img, img_dim)
+            if(img_dim is not None):
+                img = cv2.resize(img, img_dim)
 
             #save to directory
-            cv2.imwrite(img_path, resized_image)
+            cv2.imwrite(img_path, img)
             pic_num += 1
             
         except Exception as e:
@@ -99,9 +102,13 @@ def find_uglies(folder, ugly):
         #ugly: The image to remove duplicates of
     #Returns: The number of ugly images removed
     
-    #get the ugly image
+    #get the ugly images
+    uglies = []
     try:
-        ug = cv2.imread(ugly)
+        for ug in os.listdir(ugly):
+            uglyImage = cv2.imread(ugly+'/'+ug,cv2.IMREAD_GRAYSCALE)
+            uglyImage = cv2.resize(uglyImage,(128,128))
+            uglies.append(uglyImage)
     except Exception as e:
         print(str(e))
         return -1
@@ -112,12 +119,21 @@ def find_uglies(folder, ugly):
         try:
             #load image into memory
             current_img_path = str(folder) + '/' + str(img)
-            question = cv2.imread(current_img_path)
-            
+            question = cv2.imread(current_img_path,cv2.IMREAD_GRAYSCALE)
+            #if its empty
+            if(question==None):
+                try:
+                    os.remove(current_img_path)
+                except Exception as e:
+                    print(str(e))
+                continue
+                
+            question = cv2.resize(question,(128,128))
             #if match
-            if ug.shape == question.shape and not(np.bitwise_xor(ug,question).any()):
-                num_uglies +=1
-                os.remove(current_img_path)
+            for ug in uglies:
+                if not(np.bitwise_xor(ug,question).any()):
+                    num_uglies +=1
+                    os.remove(current_img_path)
         except Exception as e:
             print(str(e))
             
