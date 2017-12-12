@@ -247,6 +247,16 @@ def train_classifier_from_images(train_dir,train_size,val_dir,val_size,output_di
     
     #create the combined dataset
     print("Combining datasets...")
+    from os.path import isdir
+    from os import makedirs
+    if(not isdir(output_dir)):
+        makedirs(output_dir)
+        
+    if(not isdir(output_dir + "/train")):
+        makedirs(output_dir + "/train")
+    if(not isdir(output_dir + "/validation")):
+        makedirs(output_dir + "/validation")
+    
     X_train,y_train,labels = create_data_set(train_dir,output_dir+"/train",save_to_file=True)
     X_val,y_val,labels = create_data_set(val_dir,output_dir+"/validation",save_to_file=True)
     
@@ -258,8 +268,10 @@ def train_classifier_from_images(train_dir,train_size,val_dir,val_size,output_di
     #create the extension model
     print("Creating extension model...")
     extModel = Sequential()
-    extModel.add(Dense(num_classes,input_shape=(2048,), activation='softmax', W_regularizer=l2(0.01)))
-    extModel.compile(loss='hinge',optimizer=SGD(lr=0.01,momentum=0.9),metrics=["accuracy"])
+    extModel.add(Dense(256,input_shape=(2048,), activation='relu'))
+    extModel.add(Dense(256,activation='relu'))
+    extModel.add(Dense(num_classes,activation='softmax'))
+    extModel.compile(loss='categorical_crossentropy',optimizer=SGD(lr=0.01,momentum=0.9),metrics=["accuracy"])
     
     #callbacks
     checkpoint = ModelCheckpoint(output_dir + "/extModel"+str(int(time()))+".h5", monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
@@ -268,6 +280,71 @@ def train_classifier_from_images(train_dir,train_size,val_dir,val_size,output_di
     
     with open(output_dir+"/labels.txt","w") as output:
         output.write("".join([label + '\n' for label in labels]))
+    
+    #train model
+    print("Training...")
+    extModel.fit(X_train,y_train,
+                 batch_size=32,
+                 epochs=50,
+                 validation_data=(X_val,y_val),
+                 callbacks = [checkpoint,early])
+    
+    return extModel
+
+
+def train_classifier_from_data(train_dir,val_dir,labels,output_dir):
+    from time import time
+    from keras.models import Sequential
+    from keras.optimizers import SGD
+    from keras.layers import Dense, BatchNormalization
+    from sklearn.utils import shuffle
+    from keras.callbacks import EarlyStopping, ModelCheckpoint
+    import numpy as np
+    from os.path import isdir, exists
+    
+    if(not isdir(train_dir)):
+        print("No directory found: " + train_dir)
+        return
+    
+    if(not isdir(val_dir)):
+        print("No directory found: " + val_dir)
+        return
+    if(not exists(labels)):
+        print("no labels file found: " + labels)
+    
+    X_train = np.load(train_dir+'/data_set.npy')
+    y_train = np.load(train_dir+'/label_codes.npy')
+    X_val = np.load(val_dir+'/data_set.npy')
+    y_val = np.load(val_dir+'/label_codes.npy')
+    f = open(labels,'r')
+    x = f.readlines()
+    y = []
+    for i in x:
+        y.append(i.split('\n')[0])
+    class_labels = y
+    
+    #shuffle the train data
+    X_train,y_train = shuffle(X_train,y_train)
+    X_val,y_val = shuffle(X_val,y_val)
+    num_classes = len(class_labels)
+    
+    #create the extension model
+    print("Creating extension model...")
+    extModel = Sequential()
+    extModel.add(Dense(256,input_shape=(2048,), activation='relu'))
+    extModel.add(BatchNormalization())
+    extModel.add(Dense(256,activation='relu'))
+    extModel.add(BatchNormalization())
+    extModel.add(Dense(num_classes,activation='softmax'))
+    extModel.compile(loss='categorical_crossentropy',optimizer=SGD(lr=0.01,momentum=0.9),metrics=["accuracy"])
+    
+    #callbacks
+    checkpoint = ModelCheckpoint(output_dir + "/extModel"+str(int(time()))+".h5", monitor='val_acc', verbose=1, save_best_only=True, save_weights_only=False, mode='auto', period=1)
+    early = EarlyStopping(monitor='val_acc', min_delta=0, patience=10, verbose=1, mode='auto')
+    
+    
+    with open(output_dir+"/labels.txt","w") as output:
+        output.write("".join([label + '\n' for label in class_labels]))
     
     #train model
     print("Training...")
