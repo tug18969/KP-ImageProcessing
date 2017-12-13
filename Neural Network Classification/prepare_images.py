@@ -82,18 +82,6 @@ def store_raw_images(images_link, store_path, pic_num=1, img_dim=None, quiet=Fal
             
     #return number of pictures up to this point
     return pic_num
-
-
-def create_bg(neg, bg='bg.txt'):
-	#create the bg file that lists all negative images
-    #Arguments:
-        #neg: the negative images folder
-        #bg: the txt file to contain all negative image paths
-    for img in os.listdir(neg):
-        line = neg + '/' + img + '\n'
-        with open(bg,'a') as f:
-            f.write(line)
-                    
                     
 def find_uglies(folder, ugly):
     #Removes images similar to the specified ugly image
@@ -138,122 +126,7 @@ def find_uglies(folder, ugly):
             print(str(e))
             
     return num_uglies
-
-
-def create_positives(pos,info, bg, num_samples):
-    #get the number of samples that should be generated from each positive
-    num_positives = len(os.listdir(pos))
-    if (num_samples <= num_positives):
-        samples_per_positive = 1
-        samples_remainder = 0
-    else:
-        samples_per_positive = math.floor(num_samples/len(os.listdir(pos)))
-        samples_remainder = num_samples%len(os.listdir(pos))
-    
-    isFirst = True
-    count = 1
-    for img in os.listdir(pos):
-        if(count > num_samples+1):
-            break
-        if isFirst:
-            
-            exc = ["opencv_createsamples", "-img",pos + '/' + img, "-bg", bg, "-info",
-                   info+"/info" + str(count) + ".lst", "-pngoutput",info,
-                   "maxxangle", "0.5", "-maxyangle", "0.5", "-maxzangle", "0.5",
-                   "-num", str(samples_per_positive+samples_remainder)]
-            isFirst = False
-            count += samples_per_positive + samples_remainder
-            subprocess.call(exc)
-        else:
-            exc = ["opencv_createsamples", "-img",pos + '/' + img, "-bg", bg, "-info",
-                   info+"/info" + str(count) + ".lst", "-pngoutput",info,
-                   "maxxangle", "0.5", "-maxyangle", "0.5", "-maxzangle", "0.5",
-                   "-num", str(samples_per_positive)]
-            count += samples_per_positive
-            subprocess.call(exc)            
-
-
-
-def create_positives_new(pos,info,bg,num_samples):
-   
-    vecpath = info + "/vec"
-    if not os.path.exists(vecpath):
-        os.makedirs(vecpath)
-        
-    positives = os.listdir(pos)
-    #case: fewer requested samples than positive images. Then generate
-    #one sample from each positive up to the desired amount
-    if(num_samples<=len(positives)):
-        for i in range(0,num_samples):
-            samples_path = info + '/' + str(i)
-            if not os.path.exists(samples_path):
-                os.makedirs(samples_path)
-            
-            #run create_samples
-            exc = ["opencv_createsamples", "-img",pos + '/' + positives[i], "-bg", bg, "-info",
-            samples_path + "/info.lst", "-pngoutput",samples_path,
-            "maxxangle", "0.5", "-maxyangle", "0.5", "-maxzangle", "0.5",
-            "-num", "1"]
-            subprocess.call(exc)
-            
-            #run create_samples to make the vec file
-            vecexc = ["opencv_createsamples", "-info",samples_path + "/info.lst",
-                      "-num", "1","-w", "20", "-h", "20", "-vec",
-                      vecpath + "/positives" + str(i) + ".vec"]
-            subprocess.call(vecexc)
-    
-    #case: more samples requested than have positive images.
-    #Generate a number of samples from each positive.
-    else:
-        #get minimum number of samples per positive and extra
-        samples_per_positive = num_samples/len(positives)
-        num_extra = num_samples%len(positives)
-        
-        for img in positives:
-            #make a directory if needed
-            samples_path = info + '/' + img.split('.')[0]
-            if not os.path.exists(samples_path):
-                os.makedirs(samples_path)
-            
-            #if we've got extras, use one
-            if(num_extra!=0):
-                n_samples = str(samples_per_positive+1)
-                num_extra -= 1
-            else:
-                n_samples = str(samples_per_positive)
-            
-            #execute opencv_createsamples for the image
-            exc = ["opencv_createsamples", "-img",pos + '/' + img, "-bg", bg, "-info",
-                       samples_path + "/info.lst", "-pngoutput",samples_path,
-                       "maxxangle", "0.5", "-maxyangle", "0.5", "-maxzangle", "0.5",
-                       "-num", n_samples]
-            subprocess.call(exc)
-            
-            #execute create_samples for vec file
-            vecexc = ["opencv_createsamples", "-info",samples_path + "/info.lst",
-                      "-num", n_samples,"-w", "20", "-h", "20", "-vec",
-                      vecpath + "/positives" + img.split('.')[0] + ".vec"]
-            subprocess.call(vecexc)
-    
-    #merge all vector files
-    mergevec.merge_vec_files(vecpath, info+"/positives.vec")
-    #return path to merged vector file
-    return info + "/positives.vec"
-                
-
-def train(vecpath, bg, numPos, numNeg, numStages,data = "data"):
-    if not os.path.exists(data):
-        os.makedirs(data)
-    
-    exc = ["opencv_traincascade", "-data", data, "-vec", vecpath, "-bg", bg, 
-           "-numPos", str(numPos), "-numNeg", str(numNeg), "-numStages", str(numStages), "-w","20",
-           "-h","20"]
-    errlog = open("err.txt","w")
-        
-    subprocess.call(exc,stdout = errlog, stderr = errlog)
-    
-if(__name__=="__main__"):main()
-    
++ 
 
 def splitImageSet(rootFolder, outFolder, p):
     import os
