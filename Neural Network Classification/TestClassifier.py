@@ -249,6 +249,14 @@ def train_classifier_from_images(train_dir,train_size,val_dir,val_size,output_di
     print("Combining datasets...")
     from os.path import isdir
     from os import makedirs
+    
+    if(not isdir(train_dir)):
+        print("No directory named " +train_dir)
+        return
+    if(not isdir(val_dir)):
+        print("No directory named " + val_dir)
+        return
+    
     if(not isdir(output_dir)):
         makedirs(output_dir)
         
@@ -396,6 +404,12 @@ def add_to_train(train_dir,image,label, resnet):
         newset = np.append(fullset,features,axis=0)
         np.save(npyname,newset)
     
-        
+if __name__ == "__main__":
+    train_dir = 'data/train'
+    val_dir = 'data/val'
+    train_size = 3000
+    val_size = 300
+    output_dir = 'demoOutput'
+    train_classifier_from_images(train_dir,train_size,val_dir,val_size,output_dir)
         
         
